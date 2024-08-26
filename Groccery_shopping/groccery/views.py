@@ -5,7 +5,7 @@ from django.views import View
 from django.db.models import Q
 from django.http import JsonResponse
 
-from .models import Product,Category,Customer,Cart
+from .models import Product,Category,Customer,Cart, Order, OrderItem
 
 def home(request):
     products = None
@@ -145,21 +145,208 @@ def showcart(request):
              if cart:
                   return render(request,'showcart.html',data)
              else:
-                 pass
+                 return render(request,'empty_cart.html',data)
         
 
 def plus_cart(request):
     if request.session.has_key('phone'):
-        phone=request.session["phone"]
-        product_id=request.GET['prod_id']
-        cart=Cart.objects.get(Q(product=product_id) & Q(phone=phone))
-        cart.quantity+=1
-        cart.save()
-        quanity=cart.quantity
-        data={
-            'quantity':quanity
+        phone = request.session["phone"]
+        product_id = request.GET.get('prod_id')  # use get() to handle missing prod_id gracefully
+
+        try:
+            cart = Cart.objects.get(Q(product_id=product_id) & Q(phone=phone))
+            cart.quantity += 1
+            cart.save()
+            quantity = cart.quantity
+            data = {
+                'quantity': quantity,
+                'price': cart.price,  # include price if needed
+            }
+        except Cart.DoesNotExist:
+            # Handle the case where the cart does not exist
+            data = {
+                'error': 'Cart item does not exist'
+            }
+
+        return JsonResponse(data)
+
+    else:
+        # Handle the case where the phone is not in the session
+        data = {
+            'error': 'User is not authenticated'
         }
         return JsonResponse(data)
+def minus_cart(request):
+    if request.session.has_key('phone'):
+        phone = request.session["phone"]
+        product_id = request.GET.get('prod_id')
+
+        try:
+            cart = Cart.objects.get(Q(product=product_id) & Q(phone=phone))
+            if cart.quantity > 1:
+                cart.quantity -= 1
+                cart.save()
+            else:
+                # If quantity is 1, you may want to delete the item from the cart
+                # cart.delete() 
+                cart.quantity = 0  # Optionally, set it to 0 instead of deleting
+
+            data = {
+                'quantity': cart.quantity,
+            }
+        except Cart.DoesNotExist:
+            data = {
+                'error': 'Item not found in the cart.'
+            }
+
+        return JsonResponse(data)
+def remove_cart(request):
+    if request.session.has_key('phone'):
+        phone = request.session["phone"]
+        product_id = request.GET.get('prod_id')  # use get() to handle missing prod_id gracefully
+
+        try:
+            cart = Cart.objects.get(Q(product_id=product_id) & Q(phone=phone))
+            cart.delete()
+            data = {
+                'success': 'Cart item removed successfully'
+            }
+        except Cart.DoesNotExist:
+            # Handle the case where the cart item does not exist
+            data = {
+                'error': 'Cart item does not exist'
+            }
+
+        return JsonResponse(data)
+
+    else:
+        # Handle the case where the phone is not in the session
+        data = {
+            'error': 'User is not authenticated'
+        }
+        return JsonResponse(data)
+
+
+def checkout(request):
+    if request.session.has_key('phone'):
+        phone = request.session['phone']
+        cart_items = Cart.objects.filter(phone=phone)
+        
+        if cart_items.exists():
+            total_amount = 0
+            cart_details = []
+
+            for item in cart_items:
+                item_total_price = item.price * item.quantity
+                total_amount += item_total_price
+                cart_details.append({
+                    'product_name': item.product.name,
+                    'quantity': item.quantity,
+                    'price': item.price,
+                    'total_price': item_total_price
+                })
+
+            data = {
+                'cart_items': cart_details,
+                'total_amount': total_amount
+            }
+            
+            return render(request, 'checkout.html', data)
+        
+        messages.info(request, "Your cart is empty. Please add items to your cart before checking out.")
+        return redirect('showcart')
+    
+    return redirect('login')
+
+
+
+
+def process_checkout(request):
+    if request.method == 'POST':
+        if request.session.has_key('phone'):
+            phone = request.session['phone']
+            customer = Customer.objects.get(phone=phone)
+            cart_items = Cart.objects.filter(phone=phone)
+
+            if cart_items.exists():
+                address = request.POST.get('address')
+                payment_method = request.POST.get('payment')
+
+                # Create Order
+                order = Order.objects.create(
+                    customer=customer,
+                    total_amount=0,  # This will be updated later
+                    payment_method=payment_method,
+                    address=address
+                )
+
+                total_amount = 0
+
+                # Create Order Items
+                for item in cart_items:
+                    item_total_price = item.price * item.quantity
+                    total_amount += item_total_price
+                    OrderItem.objects.create(
+                        order=order,
+                        product=item.product,
+                        quantity=item.quantity,
+                        price=item.price,
+                        total_price=item_total_price
+                    )
+
+                # Update total amount in the order
+                order.total_amount = total_amount
+                order.save()
+
+                # Clear the cart after the order is placed
+                cart_items.delete()
+
+                # Redirect to the invoice page
+                return redirect('invoice', order_id=order.id)
+            
+            messages.info(request, "Your cart is empty. Please add items to your cart before checking out.")
+            return redirect('showcart')
+
+    return redirect('checkout')
+def invoice(request, order_id):
+    order = get_object_or_404(Order, id=order_id)
+    return render(request, 'invoice.html', {'order': order})
+
+
+def search(request):
+    total_item = 0
+    name = ''
+    
+    if request.session.has_key('phone'):
+        phone = request.session["phone"]
+        query = request.GET.get('query', '').strip()
+
+        if query:
+            search_results = Product.objects.filter(name__icontains=query)
+        else:
+            search_results = Product.objects.none()  
+
+        categories = Category.get_all_categories()
+        total_item = Cart.objects.filter(phone=phone).count()
+
+        customer = Customer.objects.filter(phone=phone).first()
+        if customer:
+            name = customer.name
+
+        data = {
+            'name': name,
+            'totalitem': total_item,
+            'query': query,
+            'search': search_results,
+            'category': categories,
+        }
+
+        return render(request, 'search.html', data)
+    else:
+        return redirect('login')
+
+
+
 
         
           

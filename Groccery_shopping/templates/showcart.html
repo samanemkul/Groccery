@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% load static %}
 {% block content %}
+<link href="https://stackpath.bootstrapcdn.com/bootstrap/5.1.0/css/bootstrap.min.css" rel="stylesheet">
+
 <div class="container">
     <div class="border rounded p-4 m-4">
         <p class="display-4 pl-4ml-4">My cart</p>
@@ -8,55 +10,88 @@
         <table class="table">
             <thead>
                 <tr>
-                    <th> SNo.</th>
+                    <th>SNo.</th>
                     <th>Image</th>
-                    <th>Product_name</th>
+                    <th>Product Name</th>
                     <th>Qty</th>
-                    <th>price</th>
+                    <th>Price</th>
                     <th></th>
-                    <th>action</th>
+                    <th>Action</th>
                 </tr>
             </thead>
             <tbody>
                 {% for cart in cart %}
                 <tr>
-                    <td>{{forloop.counter}}</td>
-                    <td><image style ="height:80px;" class="rounded-circle" src="{{cart.product.image.url}}" alt=""></td>
-                     <td>{{cart.product.name}}</td>   
-                     <td>{{cart.quantity}}</td>
-                     <td>Rs. {{cart.product.price}}</td>
-
-                    
-                    <td><input type="button" pid="{{cart.id}}" class="minus-cart btn btn-primary" value="-"></td>
-                    <td><span if="quantity">{{cart.quantity}}</span></td>
-                    <td><input type="button" pid="{{cart.id}}" class="plus-cart btn btn-primary" value="+"></td>
-                    <td><input type="button" class="btn btn-danger btn-sm remove-cart" value="delete"></td>
-                
-            </tr>
+                    <td>{{ forloop.counter }}</td>
+                    <td><img style="height:80px;" class="rounded-circle" src="{{ cart.product.image.url }}" alt=""></td>
+                    <td>{{ cart.product.name }}</td>   
+                    <td>{{ cart.quantity }}</td>
+                    <td>Rs. {{ cart.product.price }}</td>
+                    <td><input type="button" pid="{{ cart.id }}" class="minus-cart btn btn-primary" value="-"></td>
+                    <td><span>{{ cart.quantity }}</span></td>
+                    <td><input type="button" pid="{{ cart.id }}" class="plus-cart btn btn-primary" value="+"></td>
+                    <td><input type="button" pid="{{ cart.id }}" class="btn btn-danger btn-sm remove-cart" value="Delete"></td>
+                </tr>
+                {% endfor %}
             </tbody>
-            {% endfor %}
         </table>
         <hr>
         <div class="m-3 p-3">
-            <a href="" class="btn btn-outline-info border rounded col-lg-3 float-right">Check Out</a>
-
+            <a href="/checkout"  class="btn btn-outline-info border rounded col-lg-3 float-right">Check Out</a>
         </div>
     </div>
 </div>
 
 
+
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
 <script>
-        $('.plus-cart').click(function() {
-            var id = $(this).attr("pid").toString();
-            $.ajax({
-                type: "GET",
-                url: "plus_cart",
-                data: {
-                    prod_id: id
-                },
-                success: function(data) {
-                },
-            });
-        });
+   $(document).ready(function() {
+       $('.plus-cart').click(function() {
+           var id = $(this).attr("pid").toString();
+           $.ajax({
+               type: "GET",
+               url: "/plus_cart",
+               data: {
+                   prod_id: id
+               },
+               success: function(data) {
+                   console.log(data)
+               }
+           });
+       });
+
+       $('.minus-cart').click(function() {
+           var id = $(this).attr("pid").toString();
+           $.ajax({
+               type: "GET",
+               url: "/minus_cart",
+               data: {
+                   prod_id: id
+               },
+               success: function(data) {
+                   console.log(data)
+               }
+           });
+       }); 
+
+       $('.remove-cart').click(function() {
+           var id = $(this).attr("pid").toString();
+           var eml=this
+           $.ajax({
+               type: "GET",
+               url: "/remove_cart",
+               data: {
+                   prod_id: id
+               },
+               success: function(data) {
+                   console.log(data)
+                   $(eml).closest("tr").fadeOut();
+               }
+           });
+       });
+   });
 </script>
 {% endblock %}
